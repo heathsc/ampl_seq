@@ -1,0 +1,69 @@
+use std::path::PathBuf;
+
+use clap::{Arg, ArgAction, Command, command, value_parser};
+use super::log_level::LogLevel;
+
+pub(super) fn cli_model() -> Command {
+    command!()
+        .arg(
+            Arg::new("timestamp")
+                .short('X')
+                .long("timestamp")
+                .value_parser(value_parser!(stderrlog::Timestamp))
+                .value_name("GRANULARITY")
+                .default_value("none")
+                .help("Prepend log entries with a timestamp"),
+        )
+        .arg(
+            Arg::new("loglevel")
+                .short('l')
+                .long("loglevel")
+                .value_name("LOGLEVEL")
+                .value_parser(value_parser!(LogLevel))
+                .ignore_case(true)
+                .default_value("info")
+                .help("Set log level"),
+        )
+        .arg(
+            Arg::new("quiet")
+                .action(ArgAction::SetTrue)
+                .long("quiet")
+                .conflicts_with("loglevel")
+                .help("Silence all output"),
+        )
+        .arg(
+            Arg::new("min_qual")
+                .long("min-qual")
+                .value_parser(value_parser!(u8))
+                .value_name("QUAL")
+                .default_value("0")
+                .help("Minimum base quality to consider"),
+        )
+        .arg(
+            Arg::new("reference")
+                .short('R')
+                .long("reference")
+                .value_parser(value_parser!(PathBuf))
+                .value_name("FILE")
+                .required(true)
+                .help("Reference sequence FASTA"),
+        )
+        .arg(
+            Arg::new("output_prefix")
+                .long("output-prefix")
+                .short('o')
+                .value_parser(value_parser!(String))
+                .value_name("OUTPUT PREFIX")
+                .default_value("ampl_seq")
+                .help("Prefix for output file"),
+        )
+        .arg(
+            Arg::new("input")
+                .value_parser(value_parser!(PathBuf))
+                .value_name("INPUT")
+                .action(ArgAction::Append)
+                .num_args(1..)
+                .required(true)
+                .help("Input FASTQ file(s)"),
+        )
+}
