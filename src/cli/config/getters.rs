@@ -18,4 +18,8 @@ impl Config {
    pub fn input_files(&self) -> &[PathBuf] {
        self.input_files.as_ref()
    }
+   
+   pub fn threads(&self) -> usize {
+       self.threads
+   }
 }

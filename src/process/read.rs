@@ -209,6 +209,7 @@ fn process_reads(
     if ov_buf.len() == reference.len() {
         stats.add_obs(ov_buf.as_ref());
     }
-
+    stats.add_len(ov_buf.len() as u32);
+    
     Ok(())
 }

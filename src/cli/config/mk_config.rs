@@ -26,6 +26,11 @@ impl Config {
             v
         };
 
+        let threads = m
+            .get_one::<u64>("threads")
+            .map(|x| *x as usize)
+            .unwrap_or_else(num_cpus::get);
+        
         let min_qual = m
             .get_one::<u8>("min_qual")
             .copied()
@@ -42,6 +47,7 @@ impl Config {
         Ok(Self {
             min_qual,
             output_prefix,
+            threads,
             reference,
             input_files,
         })

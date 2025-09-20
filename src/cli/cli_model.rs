@@ -32,6 +32,14 @@ pub(super) fn cli_model() -> Command {
                 .help("Silence all output"),
         )
         .arg(
+            Arg::new("threads")
+                .short('t')
+                .long("threads")
+                .value_parser(value_parser!(u64).range(1..))
+                .value_name("INT")
+                .help("Set number of process threads [default: available cores"),
+        )
+        .arg(
             Arg::new("min_qual")
                 .long("min-qual")
                 .value_parser(value_parser!(u8))
