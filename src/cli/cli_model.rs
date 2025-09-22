@@ -40,6 +40,14 @@ pub(super) fn cli_model() -> Command {
                 .help("Set number of process threads [default: available cores"),
         )
         .arg(
+            Arg::new("readers")
+                .short('r')
+                .long("readers")
+                .value_parser(value_parser!(u64).range(1..))
+                .value_name("INT")
+                .help("Set number of read threads [default: MIN (physical cores, no. input files)"),
+        )
+        .arg(
             Arg::new("min_qual")
                 .long("min-qual")
                 .value_parser(value_parser!(u8))
@@ -70,7 +78,7 @@ pub(super) fn cli_model() -> Command {
                 .value_parser(value_parser!(PathBuf))
                 .value_name("INPUT")
                 .action(ArgAction::Append)
-                .num_args(1..)
+                .num_args(2..)
                 .required(true)
                 .help("Input FASTQ file(s)"),
         )

@@ -2,6 +2,7 @@ use std::{
     collections::BTreeMap,
     fs::File,
     io::{BufWriter, Write},
+    ops::AddAssign,
 };
 
 use anyhow::Context;
@@ -14,10 +15,30 @@ pub struct Counts {
     base_counts: [u64; 4],
 }
 
+impl AddAssign for Counts {
+    fn add_assign(&mut self, rhs: Self) {
+        for ix in 0..4 {
+            self.base_counts[ix] += rhs.base_counts[ix]
+        }
+    }
+}
+
 pub struct Stats<'a> {
     pos_counts: Vec<Counts>,
     insert_len: InsertLength,
     mut_corr: MutCorr<'a>,
+}
+
+impl<'a> AddAssign for Stats<'a> {
+    fn add_assign(&mut self, mut rhs: Self) {
+        assert_eq!(self.pos_counts.len(), rhs.pos_counts.len());
+
+        for (c1, c2) in self.pos_counts.iter_mut().zip(rhs.pos_counts.drain(..)) {
+            c1.add_assign(c2)
+        }
+        self.insert_len += rhs.insert_len;
+        self.mut_corr += rhs.mut_corr
+    }
 }
 
 impl<'a> Stats<'a> {
@@ -105,6 +126,15 @@ pub struct InsertLength {
     hash: BTreeMap<u32, u64>,
 }
 
+impl AddAssign for InsertLength {
+    fn add_assign(&mut self, rhs: Self) {
+        for (l, c) in rhs.hash.iter() {
+            let e = self.hash.entry(*l).or_default();
+            *e += *c
+        }
+    }
+}
+
 impl InsertLength {
     pub fn add_len(&mut self, x: u32) {
         let e = self.hash.entry(x).or_default();
@@ -132,6 +162,17 @@ impl InsertLength {
 pub struct MutCorr<'a> {
     cts: Vec<[u64; 4]>,
     rf: &'a [u8],
+}
+
+impl<'a> AddAssign for MutCorr<'a> {
+    fn add_assign(&mut self, rhs: Self) {
+        assert_eq!(self.rf, rhs.rf);
+        for (ct1, ct2) in self.cts.iter_mut().zip(rhs.cts.iter()) {
+            for ix in 0..4 {
+                ct1[ix] += ct2[ix]
+            }
+        }
+    }
 }
 
 impl<'a> MutCorr<'a> {
@@ -191,10 +232,10 @@ impl<'a> MutCorr<'a> {
         write!(wrt, "pos")?;
         let l = self.rf.len();
         for i in 0..l {
-            write!(wrt,"\t{i}")?;
+            write!(wrt, "\t{i}")?;
         }
         writeln!(wrt)?;
-        
+
         for i in 0..l {
             write!(wrt, "{i}")?;
             for j in 0..l {
@@ -209,7 +250,7 @@ impl<'a> MutCorr<'a> {
                     let cts = &self.cts[k];
                     let r1 = (cts[0] + cts[1]) as f64;
                     let r2 = (cts[2] + cts[3]) as f64;
-                    let n = r1 +r2;
+                    let n = r1 + r2;
                     let c1 = (cts[0] + cts[2]) as f64;
                     let c2 = (cts[1] + cts[3]) as f64;
                     (n * cts[3] as f64 - r2 * c2) / (r1 * r2 * c1 * c2).sqrt()

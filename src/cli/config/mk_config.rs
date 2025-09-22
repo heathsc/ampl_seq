@@ -31,6 +31,19 @@ impl Config {
             .map(|x| *x as usize)
             .unwrap_or_else(num_cpus::get);
         
+        let num_files = input_files.len() >> 1;
+
+        let readers = m
+            .get_one::<u64>("readers")
+            .map(|x| *x as usize)
+            .unwrap_or_else(|| {
+                // No point having more readers than files or physical cores
+                let i = num_cpus::get_physical().min(num_files);
+                // One reader should easily be able to supply 4 process threads
+                let j = (threads >> 2).max(1);
+                i.min(j)
+            });
+        
         let min_qual = m
             .get_one::<u8>("min_qual")
             .copied()
@@ -48,6 +61,7 @@ impl Config {
             min_qual,
             output_prefix,
             threads,
+            readers,
             reference,
             input_files,
         })

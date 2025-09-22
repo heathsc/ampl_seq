@@ -22,4 +22,8 @@ impl Config {
    pub fn threads(&self) -> usize {
        self.threads
    }
+   
+   pub fn readers(&self) -> usize {
+       self.readers
+   }
 }
