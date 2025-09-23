@@ -101,7 +101,7 @@ impl<'a> Stats<'a> {
             .zip(rf.iter())
             .enumerate()
         {
-            write!(wrt, "{ix}\t{}", *r as char)?;
+            write!(wrt, "{}\t{}", ix + 1, *r as char)?;
             let n = ct[..COUNTS_N - 1].iter().sum::<u64>();
             write!(
                 wrt,
