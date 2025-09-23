@@ -138,6 +138,9 @@ fn process_records(
         }
     }
 
+    al_buf[0] = al_buf[0].to_ascii_uppercase();
+    let ix = al_buf.len();
+    al_buf[ix - 1] = al_buf[ix - 1].to_ascii_uppercase();
     stats.add_obs(al_buf.as_ref());
     stats.add_len(ov_buf.len() as u32);
     
