@@ -18,12 +18,11 @@ pub fn process_thread<'a> (
 
     let mut stats = Stats::new(cfg.reference());
 
-    let mut overlap_align = Aligner::default();
-    overlap_align
-        .wfs_aligner_mut()
-        .set_alignment_free_ends(0, 15, 15, 0);
+    let mut aligner = Aligner::default();
 
     let mut overlap_buf = Vec::with_capacity(cfg.reference().len());
+    let mut al_buf = Vec::with_capacity(cfg.reference().len());
+    
     while let Ok(mut b) = rx.recv() {
         if b.is_empty() {
             trace!(
@@ -35,9 +34,10 @@ pub fn process_thread<'a> (
             process_buffer(
                 cfg,
                 &b,
-                &mut overlap_align,
+                &mut aligner,
                 &mut stats,
-                &mut overlap_buf
+                &mut overlap_buf,
+                &mut al_buf
             )
             .with_context(|| format!("Process thread {ix}: Error parsing input buffer"))?;
 

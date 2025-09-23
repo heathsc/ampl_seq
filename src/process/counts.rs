@@ -9,15 +9,17 @@ use anyhow::Context;
 
 use crate::cli::Config;
 
+const COUNTS_N: usize = 6;
+
 #[derive(Debug, Default)]
 pub struct Counts {
-    // Counts for A, C, G, T
-    base_counts: [u64; 4],
+    // Counts for A, C, G, T, Del, Ins
+    base_counts: [u64; COUNTS_N],
 }
 
 impl AddAssign for Counts {
     fn add_assign(&mut self, rhs: Self) {
-        for ix in 0..4 {
+        for ix in 0..COUNTS_N {
             self.base_counts[ix] += rhs.base_counts[ix]
         }
     }
@@ -64,7 +66,11 @@ impl<'a> Stats<'a> {
                 b'c' | b'C' => cts[1] += 1,
                 b'g' | b'G' => cts[2] += 1,
                 b't' | b'T' => cts[3] += 1,
+                b' ' => cts[4] += 1,
                 _ => {}
+            }
+            if c.is_ascii_lowercase() {
+                cts[5] += 1
             }
         }
 
@@ -85,7 +91,7 @@ impl<'a> Stats<'a> {
 
         writeln!(
             wrt,
-            "Pos\tRef\tN(A)\tN(C)\tN(G)\tN(T)\tTot\t%A\t%C\t%G\t%T\t%Miss"
+            "Pos\tRef\tN(A)\tN(C)\tN(G)\tN(Del)\tN(Ins)\tN(T)\tTot\t%A\t%C\t%G\t%T\t%Del\t%Ins\t%Mut"
         )?;
 
         for (ix, (ct, r)) in self
@@ -96,8 +102,12 @@ impl<'a> Stats<'a> {
             .enumerate()
         {
             write!(wrt, "{ix}\t{}", *r as char)?;
-            let n = ct.iter().sum::<u64>();
-            write!(wrt, "\t{}\t{}\t{}\t{}\t{n}", ct[0], ct[1], ct[2], ct[3])?;
+            let n = ct[..COUNTS_N - 1].iter().sum::<u64>();
+            write!(
+                wrt,
+                "\t{}\t{}\t{}\t{}\t{}\t{}\t{n}",
+                ct[0], ct[1], ct[2], ct[3], ct[4], ct[5]
+            )?;
             let n = n as f64;
             let j = match *r {
                 b'a' | b'A' => 0,
@@ -106,15 +116,19 @@ impl<'a> Stats<'a> {
                 b't' | b'T' => 3,
                 _ => 4,
             };
-            let mut miss = 0;
+            let mut mm = 0;
             for (i, x) in ct.iter().enumerate() {
                 let z = *x as f64 * 100.0 / n;
-                if i != j && j < 4 {
-                    miss += *x
+                if i != j && j < 4 && i < 4 {
+                    mm += *x
                 }
                 write!(wrt, "\t{z:.2}")?;
             }
-            writeln!(wrt, "\t{:.2}", miss as f64 * 100.0 / n)?;
+            writeln!(
+                wrt,
+                "\t{:.2}",
+                mm as f64 * 100.0 / n
+            )?;
         }
         self.insert_len.output(cfg)?;
         self.mut_corr.output(cfg)
