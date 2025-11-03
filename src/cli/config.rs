@@ -10,4 +10,5 @@ pub struct Config {
     readers: usize,
     reference: Vec<u8>,
     input_files: Vec<PathBuf>,
+    ignore_multibase_deletions: bool,
 }

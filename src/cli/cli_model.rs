@@ -56,6 +56,14 @@ pub(super) fn cli_model() -> Command {
                 .help("Minimum base quality to consider"),
         )
         .arg(
+            Arg::new("ignore_multibase_deletions")
+                .action(ArgAction::SetTrue)
+                .long("ignore-multibase-deletions")
+                .short('M')
+                .conflicts_with("loglevel")
+                .help("Silence all output"),
+        )
+        .arg(
             Arg::new("reference")
                 .short('R')
                 .long("reference")

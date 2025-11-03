@@ -4,10 +4,10 @@ use crate::process::Buffer;
 
 use crate::{
     cli::Config,
-    process::{counts::Stats, fastq::FastQRecord, align::Aligner},
+    process::{align::Aligner, counts::Stats, fastq::FastQRecord},
 };
 
-pub(super) fn process_buffer<'a> (
+pub(super) fn process_buffer<'a>(
     cfg: &'a Config,
     b: &Buffer,
     aligner: &mut Aligner,
@@ -15,28 +15,26 @@ pub(super) fn process_buffer<'a> (
     overlap_buf: &mut Vec<u8>,
     al_buf: &mut Vec<u8>,
 ) -> anyhow::Result<()> {
-    
     let (fq1, fq2) = b.fastq();
-    
-    for(r1, r2) in fq1.zip(fq2) {
+
+    for (r1, r2) in fq1.zip(fq2) {
         let rec1 = r1?;
         let rec2 = r2?;
-        process_records(rec1, rec2, stats, aligner, overlap_buf, al_buf, cfg.reference(), cfg.min_qual())?  
+        process_records(cfg, rec1, rec2, stats, aligner, overlap_buf, al_buf)?
     }
-    
+
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
 fn process_records(
+    cfg: &Config,
     rec1: FastQRecord,
     rec2: FastQRecord,
     stats: &mut Stats,
     aligner: &mut Aligner,
     ov_buf: &mut Vec<u8>,
     al_buf: &mut Vec<u8>,
-    reference: &[u8],
-    min_qual: u8,
 ) -> anyhow::Result<()> {
     let s1 = rec1
         .id()
@@ -52,6 +50,10 @@ fn process_records(
         return Err(anyhow!("Mismatch between IDs of read 1 and read 2"));
     }
 
+    let reference = cfg.reference();
+    let min_qual = cfg.min_qual();
+    let skip_mb_del = cfg.ignore_multibase_deletions();
+
     // Reverse complement read 2 sequence
     let v = aligner.buf_mut();
     v.clear();
@@ -66,9 +68,8 @@ fn process_records(
     }
 
     // Set up aligner for overlapping reads
-    aligner
-        .set_alignment_free_ends(0, 15, 15, 0);
-    
+    aligner.set_alignment_free_ends(0, 15, 15, 0);
+
     // Align read 1 and read 2 together
     aligner
         .align_buf_as_text(rec1.seq())
@@ -106,32 +107,47 @@ fn process_records(
             _ => panic!("Unknown operation"),
         }
     }
-    
+
     // Set up for end-to-end alignment
+    aligner.set_alignment_free_ends(0, 0, 0, 0);
+
     aligner
-        .set_alignment_free_ends(0, 0, 0, 0);
-    
-    aligner.align(ov_buf, reference).with_context(|| "Error when aligning to reference")?;
-    
+        .align(ov_buf, reference)
+        .with_context(|| "Error when aligning to reference")?;
+
     let cigar = aligner.wfs_aligner().cigar();
     let mut patt_itr = ov_buf.iter();
     let mut text_itr = reference.iter();
     al_buf.clear();
+    let mut start_del = None;
+    let mut mb_del = false;
+    
     for op in cigar.operations() {
         match *op {
             b'M' | b'X' => {
                 let _ = text_itr.next().unwrap();
                 let p = patt_itr.next().unwrap();
+                if let Some(x) = start_del.take() {
+                    stats.add_del(x, al_buf.len())
+                }
                 al_buf.push(p.to_ascii_uppercase());
             }
             b'I' => {
                 let _ = text_itr.next();
-                al_buf.push(b' ')
+                al_buf.push(b' ');
+                if start_del.is_some() {
+                    mb_del = true;
+                } else {
+                    start_del = Some(al_buf.len())
+                }
             }
             b'D' => {
                 let _ = patt_itr.next();
                 if let Some(e) = al_buf.last_mut() {
                     *e = e.to_ascii_lowercase()
+                }
+                if let Some(x) = start_del.take() {
+                    stats.add_del(x, al_buf.len())
                 }
             }
             _ => panic!("Unknown operation"),
@@ -141,8 +157,11 @@ fn process_records(
     al_buf[0] = al_buf[0].to_ascii_uppercase();
     let ix = al_buf.len();
     al_buf[ix - 1] = al_buf[ix - 1].to_ascii_uppercase();
-    stats.add_obs(al_buf.as_ref());
+
+    if !(skip_mb_del && mb_del) {
+        stats.add_obs(al_buf.as_ref())
+    }
     stats.add_len(ov_buf.len() as u32);
-    
+
     Ok(())
 }

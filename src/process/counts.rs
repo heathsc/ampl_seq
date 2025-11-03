@@ -1,5 +1,6 @@
 use std::{
-    collections::BTreeMap,
+    cmp::Ordering,
+    collections::{BTreeMap, HashMap},
     fs::File,
     io::{BufWriter, Write},
     ops::AddAssign,
@@ -29,6 +30,8 @@ pub struct Stats<'a> {
     pos_counts: Vec<Counts>,
     insert_len: InsertLength,
     mut_corr: MutCorr<'a>,
+    del_hash: HashMap<(usize, usize), usize>,
+    n_reads: usize,
 }
 
 impl<'a> AddAssign for Stats<'a> {
@@ -39,7 +42,13 @@ impl<'a> AddAssign for Stats<'a> {
             c1.add_assign(c2)
         }
         self.insert_len += rhs.insert_len;
-        self.mut_corr += rhs.mut_corr
+        self.mut_corr += rhs.mut_corr;
+
+        for (k, v) in rhs.del_hash.iter() {
+            *self.del_hash.entry(*k).or_default() += *v
+        }
+
+        self.n_reads += rhs.n_reads;
     }
 }
 
@@ -49,10 +58,13 @@ impl<'a> Stats<'a> {
         let pos_counts: Vec<_> = (0..size).map(|_| Counts::default()).collect();
         let insert_len = InsertLength::default();
         let mut_corr = MutCorr::new(rf);
+        let del_hash = HashMap::new();
         Self {
             pos_counts,
             insert_len,
             mut_corr,
+            del_hash,
+            n_reads: 0,
         }
     }
 
@@ -74,7 +86,13 @@ impl<'a> Stats<'a> {
             }
         }
 
+        self.n_reads += 1;
         self.mut_corr.add_obs(p);
+    }
+
+    #[inline]
+    pub fn add_del(&mut self, a: usize, b: usize) {
+        *self.del_hash.entry((a, b)).or_default() += 1
     }
 
     pub fn add_len(&mut self, len: u32) {
@@ -124,14 +142,75 @@ impl<'a> Stats<'a> {
                 }
                 write!(wrt, "\t{z:.2}")?;
             }
-            writeln!(
-                wrt,
-                "\t{:.2}",
-                mm as f64 * 100.0 / n
-            )?;
+            writeln!(wrt, "\t{:.2}", mm as f64 * 100.0 / n)?;
         }
         self.insert_len.output(cfg)?;
-        self.mut_corr.output(cfg)
+        let cm1 = self.mut_corr.output(cfg)?;
+
+        self.output_del(cfg)?;
+        let cm = self.mk_del_cm(cfg.reference().len());
+        self.output_cm(cfg, &cm, &cm1)
+    }
+
+    fn mk_del_cm(&self, ref_len: usize) -> Vec<usize> {
+        let mut cm = vec![0; ref_len * ref_len];
+        for ((x, y), z) in self.del_hash.iter() {
+            let x = *x - 1;
+            let y = *y - 1;
+            cm[x * ref_len + y] += *z;
+            if x != y {
+                cm[y * ref_len + x] += *z
+            }
+        }
+        cm
+    }
+
+    fn output_cm(&self, cfg: &Config, cm: &[usize], cm1: &[[f64; 2]]) -> anyhow::Result<()> {
+        let out_name = format!("{}_contact_map.tsv", cfg.output_prefix());
+        let mut wrt = BufWriter::new(
+            File::create(&out_name).with_context(|| "Could not open output file {out_name}")?,
+        );
+        writeln!(wrt, "x\ty\tdel%\tmm%\tr")?;
+        let tot = self.n_reads as f64;
+        let l = cfg.reference().len();
+        for x in 0..l {
+            for y in 0..l {
+                let z = &cm1[x * l + y];
+                writeln!(wrt, "{}\t{}\t{:8.5}\t{:8.5}\t{:7.5}", x + 1, y + 1, 100.0 * cm[x * l + y] as f64 / tot, 100.0 * z[0], z[1])?
+            }
+            writeln!(wrt)?
+        }
+        Ok(())
+    }
+    
+    fn output_del(&self, cfg: &Config) -> anyhow::Result<()> {
+        let mut v: Vec<_> = self.del_hash.iter().collect();
+        v.sort_unstable_by(|((a1, b1), x1), ((a2, b2), x2)| match x2.cmp(x1) {
+            Ordering::Equal => (b1 - a1).cmp(&(b2 - a2)),
+            c => c,
+        });
+
+        let tot = self.n_reads as f64;
+
+        let out_name = format!("{}_del.tsv", cfg.output_prefix());
+        let mut wrt = BufWriter::new(
+            File::create(&out_name).with_context(|| "Could not open output file {out_name}")?,
+        );
+
+        writeln!(wrt, "Start\tStop\tLen\tCount\t%")?;
+        for ((a, b), x) in v.drain(..) {
+            writeln!(
+                wrt,
+                "{}\t{}\t{}\t{}\t{:.2}",
+                a,
+                b,
+                b + 1 - a,
+                x,
+                (100.0 * *x as f64) / tot
+            )?
+        }
+
+        Ok(())
     }
 }
 
@@ -193,7 +272,7 @@ impl<'a> MutCorr<'a> {
     fn new(rf: &'a [u8]) -> Self {
         let len = rf.len();
         assert!(len > 1);
-        let sz = (len * (len - 1)) >> 1;
+        let sz = (len * (len + 1)) >> 1;
         Self {
             cts: vec![[0; 4]; sz],
             rf,
@@ -204,27 +283,27 @@ impl<'a> MutCorr<'a> {
         let tst = |a: &u8, r: &u8| {
             if a == r {
                 Some(0)
-            } else if *a == b'N' {
-                None
-            } else {
+            } else if b"ACGTacgt".contains(a) {
                 Some(1)
+            } else {
+                None
             }
         };
 
         let l = self.rf.len();
         assert_eq!(s.len(), l);
         let mut ct = self.cts.iter_mut();
-        for (i, x) in s[..l - 1]
+        for (i, x) in s
             .iter()
-            .zip(self.rf[..l - 1].iter())
+            .zip(self.rf.iter())
             .map(|(a, r)| tst(a, r))
             .enumerate()
         {
             if let Some(x) = x.map(|z| z << 1) {
-                for y in s[i + 1..]
+                for y in s[i..]
                     .iter()
-                    .zip(self.rf[i + 1..].iter())
-                    .map(|(a, r)| tst(a, r))
+                    .zip(self.rf[i..].iter())
+                    .map(|(b, r)| tst(b, r))
                 {
                     let cts = ct.next().unwrap();
                     if let Some(y) = y {
@@ -232,47 +311,59 @@ impl<'a> MutCorr<'a> {
                     }
                 }
             } else {
-                let _ = ct.nth(l - i - 2);
+                let _ = ct.nth(l - i - 1);
             }
         }
         assert_eq!(ct.next(), None);
     }
 
-    fn output(&self, cfg: &Config) -> anyhow::Result<()> {
+    fn output(&self, cfg: &Config) -> anyhow::Result<Vec<[f64; 2]>> {
         let out_name = format!("{}_mut_corr.tsv", cfg.output_prefix());
         let mut wrt = BufWriter::new(
             File::create(&out_name).with_context(|| "Could not open output file {out_name}")?,
         );
         write!(wrt, "pos")?;
         let l = self.rf.len();
-        for i in 0..l {
+        
+        let mut cm = vec!([0.0; 2]; l * l);
+        for i in 1..=l {
             write!(wrt, "\t{i}")?;
         }
         writeln!(wrt)?;
 
+        let get_k = |i, j| {
+            if i > j {
+                ((i * (i + 1)) >> 1) + j
+            } else {
+                ((j * (j + 1)) >> 1) + i
+            }
+        };
+        
         for i in 0..l {
-            write!(wrt, "{i}")?;
+            write!(wrt, "{}", i + 1)?;
             for j in 0..l {
+                let cts: &[u64; 4] = &self.cts[get_k(i, j)];
+                let n = (cts[0] + cts[1] + cts[2] + cts[3]) as f64;
                 let z = if i == j {
+                    cm[i * l + i] = [cts[3] as f64 / n, 1.0];
                     1.0
                 } else {
-                    let k = if i > j {
-                        ((i * (i - 1)) >> 1) + j
-                    } else {
-                        ((j * (j - 1)) >> 1) + i
-                    };
-                    let cts = &self.cts[k];
                     let r1 = (cts[0] + cts[1]) as f64;
                     let r2 = (cts[2] + cts[3]) as f64;
                     let n = r1 + r2;
                     let c1 = (cts[0] + cts[2]) as f64;
                     let c2 = (cts[1] + cts[3]) as f64;
-                    (n * cts[3] as f64 - r2 * c2) / (r1 * r2 * c1 * c2).sqrt()
+                    let z = cts[3] as f64 / n;
+
+                    let r = (n * cts[3] as f64 - r2 * c2) / (r1 * r2 * c1 * c2).sqrt();
+                    cm[i * l + j] = [z, r];
+                    cm[j * l + i] = [z, r];                    
+                    r2
                 };
                 write!(wrt, "\t{z:6.4}")?;
             }
             writeln!(wrt)?;
         }
-        Ok(())
+        Ok(cm)
     }
 }

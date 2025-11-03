@@ -33,6 +33,8 @@ impl Config {
         
         let num_files = input_files.len() >> 1;
 
+        let ignore_multibase_deletions = m.get_flag("ignore_multibase_deletions");
+        
         let readers = m
             .get_one::<u64>("readers")
             .map(|x| *x as usize)
@@ -64,6 +66,7 @@ impl Config {
             readers,
             reference,
             input_files,
+            ignore_multibase_deletions,
         })
     }
 }

@@ -26,4 +26,8 @@ impl Config {
    pub fn readers(&self) -> usize {
        self.readers
    }
+   
+   pub fn ignore_multibase_deletions(&self) -> bool {
+       self.ignore_multibase_deletions
+   }
 }
