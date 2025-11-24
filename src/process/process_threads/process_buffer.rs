@@ -171,23 +171,24 @@ fn process_records(
     }
     
     stats.add_mut_and_del_counts(n_mut, n_del);
-    if !((skip_mb_del && mb_del) || (skip_mult_mut && n_mut > 1) || (skip_mult_del && n_del > 1)) {
-        stats.add_obs(al_buf.as_ref())
-    }
-    stats.add_len(ov_buf.len() as u32);
-
-    if let Some(vs) = view_data.as_mut() {
-        let mut v_itr = vs.next_view().iter_mut();
-        for p in al_buf.iter() {
-            if let Some(q) = v_itr.next() {
-                *q = *p
-            } else {
-                break
+    let skip = (skip_mb_del && mb_del) || (skip_mult_mut && n_mut > 1) || (skip_mult_del && n_del > 1);
+    
+    if !skip {
+        stats.add_obs(al_buf.as_ref());
+        if let Some(vs) = view_data.as_mut() {
+            let mut v_itr = vs.next_view().iter_mut();
+            for p in al_buf.iter() {
+                if let Some(q) = v_itr.next() {
+                    *q = *p
+                } else {
+                    break
+                }
+            }
+            for q in v_itr {
+                *q = b' ';
             }
         }
-        for q in v_itr {
-            *q = b' ';
-        }
     }
+    stats.add_len(ov_buf.len() as u32);
     Ok(())
 }
