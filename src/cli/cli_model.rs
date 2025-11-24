@@ -50,6 +50,7 @@ pub(super) fn cli_model() -> Command {
         .arg(
             Arg::new("min_qual")
                 .long("min-qual")
+                .short('q')
                 .value_parser(value_parser!(u8))
                 .value_name("QUAL")
                 .default_value("0")
@@ -60,8 +61,28 @@ pub(super) fn cli_model() -> Command {
                 .action(ArgAction::SetTrue)
                 .long("ignore-multibase-deletions")
                 .short('M')
-                .conflicts_with("loglevel")
-                .help("Silence all output"),
+                .help("Ignore read pairs with multibase deletions"),
+        )
+        .arg(
+            Arg::new("ignore_multiple_deletions")
+                .action(ArgAction::SetTrue)
+                .long("ignore-multiple-deletions")
+                .short('d')
+                .help("Ignore read pairs with multiple deletions"),
+        )
+        .arg(
+            Arg::new("ignore_multiple_mutations")
+                .action(ArgAction::SetTrue)
+                .long("ignore-multiple-mutations")
+                .short('m')
+                .help("Ignore read pairs with multiple mutations"),
+        )
+        .arg(
+            Arg::new("view")
+                .action(ArgAction::SetTrue)
+                .long("view")
+                .short('V')
+                .help("Output view file"),
         )
         .arg(
             Arg::new("reference")

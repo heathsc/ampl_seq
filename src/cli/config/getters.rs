@@ -30,4 +30,16 @@ impl Config {
    pub fn ignore_multibase_deletions(&self) -> bool {
        self.ignore_multibase_deletions
    }
+   
+   pub fn ignore_multiple_deletions(&self) -> bool {
+       self.ignore_multiple_deletions
+   }
+   
+   pub fn ignore_multiple_mutations(&self) -> bool {
+       self.ignore_multiple_mutations
+   }
+   
+   pub fn view_file(&self) -> bool {
+       self.view_file
+   }
 }

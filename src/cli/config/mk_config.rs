@@ -30,11 +30,14 @@ impl Config {
             .get_one::<u64>("threads")
             .map(|x| *x as usize)
             .unwrap_or_else(num_cpus::get);
-        
+
         let num_files = input_files.len() >> 1;
 
         let ignore_multibase_deletions = m.get_flag("ignore_multibase_deletions");
-        
+        let ignore_multiple_deletions = m.get_flag("ignore_multiple_deletions");
+        let ignore_multiple_mutations = m.get_flag("ignore_multiple_mutations");
+        let view_file = m.get_flag("view");
+
         let readers = m
             .get_one::<u64>("readers")
             .map(|x| *x as usize)
@@ -45,7 +48,7 @@ impl Config {
                 let j = (threads >> 2).max(1);
                 i.min(j)
             });
-        
+
         let min_qual = m
             .get_one::<u8>("min_qual")
             .copied()
@@ -67,6 +70,9 @@ impl Config {
             reference,
             input_files,
             ignore_multibase_deletions,
+            ignore_multiple_mutations,
+            ignore_multiple_deletions,
+            view_file,
         })
     }
 }

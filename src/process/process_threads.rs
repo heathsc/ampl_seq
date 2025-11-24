@@ -5,7 +5,9 @@ use crossbeam_channel::{Receiver, Sender};
 use super::{
     Buffer,
     counts::Stats,
+    view::ViewBuf,
 };
+
 use crate::cli::Config;
 
 mod process_thread;
@@ -16,6 +18,7 @@ pub fn process_threads<'a> (
     cfg: &'a Config,
     rcv: Receiver<Buffer>,
     snd: Sender<Buffer>,
+    snd_view: Option<Sender<ViewBuf>>,
 ) -> anyhow::Result<Stats<'a>> {
     let nt = cfg.threads();
     let mut error = None;
@@ -28,7 +31,8 @@ pub fn process_threads<'a> (
             .map(|ix| {
                 let recv_buf = rcv.clone();
                 let send_buf = snd.clone();
-                scope.spawn(move || process_thread(cfg, ix, recv_buf, send_buf))
+                let send_view = snd_view.as_ref().cloned();
+                scope.spawn(move || process_thread(cfg, ix, recv_buf, send_buf, send_view))
             })
             .collect();
 

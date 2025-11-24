@@ -31,7 +31,10 @@ pub struct Stats<'a> {
     insert_len: InsertLength,
     mut_corr: MutCorr<'a>,
     del_hash: HashMap<(usize, usize), usize>,
-    n_reads: usize,
+    mut_count_hist: BTreeMap<u32, u64>,
+    del_count_hist: BTreeMap<u32, u64>,
+    del_len_hist: BTreeMap<u32, u64>,
+    n_reads: [usize; 2], // Total and filtered
 }
 
 impl<'a> AddAssign for Stats<'a> {
@@ -48,7 +51,19 @@ impl<'a> AddAssign for Stats<'a> {
             *self.del_hash.entry(*k).or_default() += *v
         }
 
-        self.n_reads += rhs.n_reads;
+        for (l, ct) in rhs.del_len_hist.iter() {
+            *self.del_len_hist.entry(*l).or_default() += *ct
+        }
+
+        for (n, ct) in rhs.del_count_hist.iter() {
+            *self.del_count_hist.entry(*n).or_default() += *ct
+        }
+
+        for (n, ct) in rhs.mut_count_hist.iter() {
+            *self.mut_count_hist.entry(*n).or_default() += *ct
+        }
+        self.n_reads[0] += rhs.n_reads[0];
+        self.n_reads[1] += rhs.n_reads[1];
     }
 }
 
@@ -59,12 +74,18 @@ impl<'a> Stats<'a> {
         let insert_len = InsertLength::default();
         let mut_corr = MutCorr::new(rf);
         let del_hash = HashMap::new();
+        let mut_count_hist = BTreeMap::new();
+        let del_count_hist = BTreeMap::new();
+        let del_len_hist = BTreeMap::new();
         Self {
             pos_counts,
             insert_len,
             mut_corr,
             del_hash,
-            n_reads: 0,
+            mut_count_hist,
+            del_count_hist,
+            del_len_hist,
+            n_reads: [0; 2],
         }
     }
 
@@ -86,15 +107,22 @@ impl<'a> Stats<'a> {
             }
         }
 
-        self.n_reads += 1;
+        self.n_reads[1] += 1;
         self.mut_corr.add_obs(p);
     }
 
     #[inline]
     pub fn add_del(&mut self, a: usize, b: usize) {
-        *self.del_hash.entry((a, b)).or_default() += 1
+        *self.del_hash.entry((a, b)).or_default() += 1;
+        let l = (b + 1 - a) as u32;
+        *self.del_len_hist.entry(l).or_default() += 1;
     }
 
+    pub fn add_mut_and_del_counts(&mut self, n_mut: u32, n_del: u32) {
+        *self.mut_count_hist.entry(n_mut).or_default() += 1;
+        *self.del_count_hist.entry(n_del).or_default() += 1;
+        self.n_reads[0] += 1;
+    }
     pub fn add_len(&mut self, len: u32) {
         self.insert_len.add_len(len)
     }
@@ -144,6 +172,43 @@ impl<'a> Stats<'a> {
             }
             writeln!(wrt, "\t{:.2}", mm as f64 * 100.0 / n)?;
         }
+
+        let out_name = format!("{}_mut_and_del_stats.tsv", cfg.output_prefix());
+        let mut wrt = BufWriter::new(
+            File::create(&out_name).with_context(|| "Could not open output file {out_name}")?,
+        );
+        let max_del_len = self.del_len_hist.keys().last().copied().unwrap_or_default();
+        let max_n_del = self
+            .del_count_hist
+            .keys()
+            .last()
+            .copied()
+            .unwrap_or_default();
+        let max_n_mut = self
+            .mut_count_hist
+            .keys()
+            .last()
+            .copied()
+            .unwrap_or_default();
+        let n = max_del_len.max(max_n_del).max(max_n_mut);
+        let n_dels = self.del_len_hist.values().sum::<u64>() as f64;
+        let n_reads = self.n_reads[0] as f64;
+        writeln!(
+            wrt,
+            "count\tmuts_per_read\tmut_count_%\tdels_per_read\tdel_count_%\tdel_size\tdel_size_%"
+        )?;
+        for i in 0..=n {
+            let mut_ct = self.mut_count_hist.get(&i).copied().unwrap_or_default();
+            let del_ct = self.del_count_hist.get(&i).copied().unwrap_or_default();
+            let del_len = self.del_len_hist.get(&i).copied().unwrap_or_default();
+            writeln!(
+                wrt,
+                "{i}\t{mut_ct}\t{}\t{del_ct}\t{}\t{del_len}\t{}",
+                mut_ct as f64 * 100.0 / n_reads,
+                del_ct as f64 * 100.0 / n_reads,
+                del_len as f64 * 100.0 / n_dels,
+            )?;
+        }
         self.insert_len.output(cfg)?;
         let cm1 = self.mut_corr.output(cfg)?;
 
@@ -171,18 +236,26 @@ impl<'a> Stats<'a> {
             File::create(&out_name).with_context(|| "Could not open output file {out_name}")?,
         );
         writeln!(wrt, "x\ty\tdel%\tmm%\tr")?;
-        let tot = self.n_reads as f64;
+        let tot = self.n_reads[1] as f64;
         let l = cfg.reference().len();
         for x in 0..l {
             for y in 0..l {
                 let z = &cm1[x * l + y];
-                writeln!(wrt, "{}\t{}\t{:8.5}\t{:8.5}\t{:7.5}", x + 1, y + 1, 100.0 * cm[x * l + y] as f64 / tot, 100.0 * z[0], z[1])?
+                writeln!(
+                    wrt,
+                    "{}\t{}\t{:8.5}\t{:8.5}\t{:7.5}",
+                    x + 1,
+                    y + 1,
+                    100.0 * cm[x * l + y] as f64 / tot,
+                    100.0 * z[0],
+                    z[1]
+                )?
             }
             writeln!(wrt)?
         }
         Ok(())
     }
-    
+
     fn output_del(&self, cfg: &Config) -> anyhow::Result<()> {
         let mut v: Vec<_> = self.del_hash.iter().collect();
         v.sort_unstable_by(|((a1, b1), x1), ((a2, b2), x2)| match x2.cmp(x1) {
@@ -190,7 +263,7 @@ impl<'a> Stats<'a> {
             c => c,
         });
 
-        let tot = self.n_reads as f64;
+        let tot = self.n_reads[1] as f64;
 
         let out_name = format!("{}_del.tsv", cfg.output_prefix());
         let mut wrt = BufWriter::new(
@@ -324,8 +397,8 @@ impl<'a> MutCorr<'a> {
         );
         write!(wrt, "pos")?;
         let l = self.rf.len();
-        
-        let mut cm = vec!([0.0; 2]; l * l);
+
+        let mut cm = vec![[0.0; 2]; l * l];
         for i in 1..=l {
             write!(wrt, "\t{i}")?;
         }
@@ -338,7 +411,7 @@ impl<'a> MutCorr<'a> {
                 ((j * (j + 1)) >> 1) + i
             }
         };
-        
+
         for i in 0..l {
             write!(wrt, "{}", i + 1)?;
             for j in 0..l {
@@ -357,7 +430,7 @@ impl<'a> MutCorr<'a> {
 
                     let r = (n * cts[3] as f64 - r2 * c2) / (r1 * r2 * c1 * c2).sqrt();
                     cm[i * l + j] = [z, r];
-                    cm[j * l + i] = [z, r];                    
+                    cm[j * l + i] = [z, r];
                     r2
                 };
                 write!(wrt, "\t{z:6.4}")?;
