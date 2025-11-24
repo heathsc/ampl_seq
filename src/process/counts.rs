@@ -34,6 +34,7 @@ pub struct Stats<'a> {
     mut_count_hist: BTreeMap<u32, u64>,
     del_count_hist: BTreeMap<u32, u64>,
     del_len_hist: BTreeMap<u32, u64>,
+    mod_count_hist: BTreeMap<u32, u64>,
     n_reads: [usize; 2], // Total and filtered
 }
 
@@ -62,6 +63,10 @@ impl<'a> AddAssign for Stats<'a> {
         for (n, ct) in rhs.mut_count_hist.iter() {
             *self.mut_count_hist.entry(*n).or_default() += *ct
         }
+
+        for (n, ct) in rhs.mod_count_hist.iter() {
+            *self.mod_count_hist.entry(*n).or_default() += *ct
+        }
         self.n_reads[0] += rhs.n_reads[0];
         self.n_reads[1] += rhs.n_reads[1];
     }
@@ -76,6 +81,7 @@ impl<'a> Stats<'a> {
         let del_hash = HashMap::new();
         let mut_count_hist = BTreeMap::new();
         let del_count_hist = BTreeMap::new();
+        let mod_count_hist = BTreeMap::new();
         let del_len_hist = BTreeMap::new();
         Self {
             pos_counts,
@@ -84,6 +90,7 @@ impl<'a> Stats<'a> {
             del_hash,
             mut_count_hist,
             del_count_hist,
+            mod_count_hist,
             del_len_hist,
             n_reads: [0; 2],
         }
@@ -121,6 +128,7 @@ impl<'a> Stats<'a> {
     pub fn add_mut_and_del_counts(&mut self, n_mut: u32, n_del: u32) {
         *self.mut_count_hist.entry(n_mut).or_default() += 1;
         *self.del_count_hist.entry(n_del).or_default() += 1;
+        *self.mod_count_hist.entry(n_mut + n_del).or_default() += 1;
         self.n_reads[0] += 1;
     }
     pub fn add_len(&mut self, len: u32) {
@@ -178,32 +186,28 @@ impl<'a> Stats<'a> {
             File::create(&out_name).with_context(|| "Could not open output file {out_name}")?,
         );
         let max_del_len = self.del_len_hist.keys().last().copied().unwrap_or_default();
-        let max_n_del = self
-            .del_count_hist
+        let max_mod = self
+            .mod_count_hist
             .keys()
             .last()
             .copied()
             .unwrap_or_default();
-        let max_n_mut = self
-            .mut_count_hist
-            .keys()
-            .last()
-            .copied()
-            .unwrap_or_default();
-        let n = max_del_len.max(max_n_del).max(max_n_mut);
+        let n = max_del_len.max(max_mod);
         let n_dels = self.del_len_hist.values().sum::<u64>() as f64;
         let n_reads = self.n_reads[0] as f64;
         writeln!(
             wrt,
-            "count\tmuts_per_read\tmut_count_%\tdels_per_read\tdel_count_%\tdel_size\tdel_size_%"
+            "count\tmods_per_read\tmod_count_%\tmuts_per_read\tmut_count_%\tdels_per_read\tdel_count_%\tdel_size\tdel_size_%"
         )?;
         for i in 0..=n {
+            let mod_ct = self.mod_count_hist.get(&i).copied().unwrap_or_default();
             let mut_ct = self.mut_count_hist.get(&i).copied().unwrap_or_default();
             let del_ct = self.del_count_hist.get(&i).copied().unwrap_or_default();
             let del_len = self.del_len_hist.get(&i).copied().unwrap_or_default();
             writeln!(
                 wrt,
-                "{i}\t{mut_ct}\t{}\t{del_ct}\t{}\t{del_len}\t{}",
+                "{i}\t{mod_ct}\t{}\t{mut_ct}\t{}\t{del_ct}\t{}\t{del_len}\t{}",
+                mod_ct as f64 * 100.0 / n_reads,
                 mut_ct as f64 * 100.0 / n_reads,
                 del_ct as f64 * 100.0 / n_reads,
                 del_len as f64 * 100.0 / n_dels,
