@@ -39,6 +39,10 @@ impl Config {
        self.ignore_multiple_mutations
    }
    
+   pub fn ignore_multiple_modifications(&self) -> bool {
+       self.ignore_multiple_modifications
+   }
+   
    pub fn view_file(&self) -> bool {
        self.view_file
    }

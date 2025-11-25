@@ -78,6 +78,13 @@ pub(super) fn cli_model() -> Command {
                 .help("Ignore read pairs with multiple mutations"),
         )
         .arg(
+            Arg::new("ignore_multiple_modifications")
+                .action(ArgAction::SetTrue)
+                .long("ignore-multiple-modifications")
+                .short('D')
+                .help("Ignore read pairs with multiple modifications"),
+        )
+        .arg(
             Arg::new("view")
                 .action(ArgAction::SetTrue)
                 .long("view")

@@ -21,7 +21,16 @@ pub(super) fn process_buffer<'a>(
     for (r1, r2) in fq1.zip(fq2) {
         let rec1 = r1?;
         let rec2 = r2?;
-        process_records(cfg, rec1, rec2, stats, aligner, overlap_buf, al_buf, &mut view_data)?
+        process_records(
+            cfg,
+            rec1,
+            rec2,
+            stats,
+            aligner,
+            overlap_buf,
+            al_buf,
+            &mut view_data,
+        )?
     }
 
     Ok(())
@@ -57,6 +66,7 @@ fn process_records(
     let skip_mb_del = cfg.ignore_multibase_deletions();
     let skip_mult_del = cfg.ignore_multiple_deletions();
     let skip_mult_mut = cfg.ignore_multiple_mutations();
+    let skip_mult_mod = cfg.ignore_multiple_modifications();
 
     // Reverse complement read 2 sequence
     let v = aligner.buf_mut();
@@ -169,10 +179,13 @@ fn process_records(
     if let Some(x) = start_del.take() {
         stats.add_del(x, al_buf.len())
     }
-    
+
     stats.add_mut_and_del_counts(n_mut, n_del);
-    let skip = (skip_mb_del && mb_del) || (skip_mult_mut && n_mut > 1) || (skip_mult_del && n_del > 1);
-    
+    let skip = (skip_mb_del && mb_del)
+        || (skip_mult_mut && n_mut > 1)
+        || (skip_mult_del && n_del > 1)
+        || (skip_mult_mod && (n_mut + n_del) > 1);
+
     if !skip {
         stats.add_obs(al_buf.as_ref());
         if let Some(vs) = view_data.as_mut() {
@@ -181,7 +194,7 @@ fn process_records(
                 if let Some(q) = v_itr.next() {
                     *q = *p
                 } else {
-                    break
+                    break;
                 }
             }
             for q in v_itr {

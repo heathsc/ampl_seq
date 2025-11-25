@@ -36,6 +36,7 @@ impl Config {
         let ignore_multibase_deletions = m.get_flag("ignore_multibase_deletions");
         let ignore_multiple_deletions = m.get_flag("ignore_multiple_deletions");
         let ignore_multiple_mutations = m.get_flag("ignore_multiple_mutations");
+        let ignore_multiple_modifications = m.get_flag("ignore_multiple_modifications");
         let view_file = m.get_flag("view");
 
         let readers = m
@@ -72,6 +73,7 @@ impl Config {
             ignore_multibase_deletions,
             ignore_multiple_mutations,
             ignore_multiple_deletions,
+            ignore_multiple_modifications,
             view_file,
         })
     }

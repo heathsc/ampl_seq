@@ -13,5 +13,6 @@ pub struct Config {
     ignore_multibase_deletions: bool,
     ignore_multiple_deletions: bool,
     ignore_multiple_mutations: bool,
+    ignore_multiple_modifications: bool,
     view_file: bool,
 }

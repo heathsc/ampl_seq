@@ -145,7 +145,7 @@ impl<'a> Stats<'a> {
 
         writeln!(
             wrt,
-            "Pos\tRef\tN(A)\tN(C)\tN(G)\tN(T)\tN(Del)\tN(Ins)\tTot\t%A\t%C\t%G\t%T\t%Del\t%Ins\t%Mut"
+            "Pos\tRef\tN(A)\tN(C)\tN(G)\tN(T)\tN(Del)\tN(Ins)\tTot\t%A\t%C\t%G\t%T\t%Del\t%Ins\t%Mut\t%Mod"
         )?;
 
         for (ix, (ct, r)) in self
@@ -178,7 +178,7 @@ impl<'a> Stats<'a> {
                 }
                 write!(wrt, "\t{z:.2}")?;
             }
-            writeln!(wrt, "\t{:.2}", mm as f64 * 100.0 / n)?;
+            writeln!(wrt, "\t{:.2}\t{:.2}", mm as f64 * 100.0 / n, (mm + ct[4] + ct[5]) as f64 * 100.0 / n)?;
         }
 
         let out_name = format!("{}_mut_and_del_stats.tsv", cfg.output_prefix());
