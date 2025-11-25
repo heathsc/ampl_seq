@@ -145,7 +145,7 @@ impl<'a> Stats<'a> {
 
         writeln!(
             wrt,
-            "Pos\tRef\tN(A)\tN(C)\tN(G)\tN(Del)\tN(Ins)\tN(T)\tTot\t%A\t%C\t%G\t%T\t%Del\t%Ins\t%Mut"
+            "Pos\tRef\tN(A)\tN(C)\tN(G)\tN(T)\tN(Del)\tN(Ins)\tTot\t%A\t%C\t%G\t%T\t%Del\t%Ins\t%Mut"
         )?;
 
         for (ix, (ct, r)) in self
