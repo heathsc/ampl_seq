@@ -46,4 +46,12 @@ impl Config {
    pub fn view_file(&self) -> bool {
        self.view_file
    }
+   
+   pub fn max_overlap_divergence(&self) -> u32 {
+       self.max_overlap_divergence
+   }
+   
+   pub fn max_length_divergence(&self) -> u32 {
+       self.max_length_divergence
+   }
 }

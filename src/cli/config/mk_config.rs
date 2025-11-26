@@ -54,6 +54,14 @@ impl Config {
             .get_one::<u8>("min_qual")
             .copied()
             .expect("Missing default for min_qual");
+        let max_overlap_divergence = m
+            .get_one::<u32>("max_overlap_divergence")
+            .copied()
+            .expect("Missing default for min_qual");
+        let max_length_divergence = m
+            .get_one::<u32>("max_length_divergence")
+            .copied()
+            .expect("Missing default for min_qual");
         let output_prefix = m
             .get_one::<String>("output_prefix")
             .map(|s| s.to_owned())
@@ -70,6 +78,8 @@ impl Config {
             readers,
             reference,
             input_files,
+            max_length_divergence,
+            max_overlap_divergence,
             ignore_multibase_deletions,
             ignore_multiple_mutations,
             ignore_multiple_deletions,

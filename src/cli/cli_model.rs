@@ -57,6 +57,22 @@ pub(super) fn cli_model() -> Command {
                 .help("Minimum base quality to consider"),
         )
         .arg(
+            Arg::new("max_overlap_divergence")
+                .long("max-overlap-divergence")
+                .value_parser(value_parser!(u32))
+                .value_name("INT")
+                .default_value("5")
+                .help("Maximum divergence allowed between sequence of overlapping reads"),
+        )
+        .arg(
+            Arg::new("max_length_divergence")
+                .long("max-length-divergence")
+                .value_parser(value_parser!(u32))
+                .value_name("INT")
+                .default_value("10")
+                .help("Maximum divergence allowed in length of consensus sequence"),
+        )
+        .arg(
             Arg::new("ignore_multibase_deletions")
                 .action(ArgAction::SetTrue)
                 .long("ignore-multibase-deletions")

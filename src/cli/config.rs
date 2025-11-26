@@ -10,6 +10,8 @@ pub struct Config {
     readers: usize,
     reference: Vec<u8>,
     input_files: Vec<PathBuf>,
+    max_length_divergence: u32,
+    max_overlap_divergence: u32,
     ignore_multibase_deletions: bool,
     ignore_multiple_deletions: bool,
     ignore_multiple_mutations: bool,

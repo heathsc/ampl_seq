@@ -67,7 +67,10 @@ fn process_records(
     let skip_mult_del = cfg.ignore_multiple_deletions();
     let skip_mult_mut = cfg.ignore_multiple_mutations();
     let skip_mult_mod = cfg.ignore_multiple_modifications();
-
+    let max_divergence = cfg.max_overlap_divergence();
+    let ref_len = reference.len();
+    let len_range=ref_len.saturating_sub(cfg.max_length_divergence() as usize)..=ref_len + cfg.max_length_divergence() as usize;
+    
     // Reverse complement read 2 sequence
     let v = aligner.buf_mut();
     v.clear();
@@ -94,6 +97,7 @@ fn process_records(
     let mut patt_itr = rec1.seq().iter().zip(rec1.qual().iter());
 
     ov_buf.clear();
+    let mut mm = 0;
     for op in cigar.operations() {
         match *op {
             b'M' | b'X' => {
@@ -102,8 +106,10 @@ fn process_records(
                 let (base, qual) = if t == p {
                     (*t, *(qt.max(qp)))
                 } else if qt > qp {
+                    mm += 1;
                     (*t, qt - qp)
                 } else {
+                    mm += 1;
                     (*p, qp - qt)
                 };
                 if qual.saturating_sub(33) >= min_qual {
@@ -121,7 +127,11 @@ fn process_records(
             _ => panic!("Unknown operation"),
         }
     }
-
+    
+    let l = ov_buf.len();
+    if mm > max_divergence || !len_range.contains(&l) {
+        return Ok(())
+    }
     // Set up for end-to-end alignment
     aligner.set_alignment_free_ends(0, 0, 0, 0);
 
@@ -145,7 +155,7 @@ fn process_records(
                 if let Some(x) = start_del.take() {
                     stats.add_del(x, al_buf.len())
                 }
-                if *r != *p {
+                if *r != *p && *p != b'N'{
                     n_mut += 1
                 }
                 al_buf.push(p.to_ascii_uppercase());
